@@ -12,6 +12,7 @@ const password = "b"
 
 async function getQuotes(pgnum) {
   const url = pgnum ? `https://quotes.toscrape.com/page/${pgnum}/` : `https://quotes.toscrape.com/`
+  console.log(`Request URL to scrape ${url}`)
 
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
@@ -26,6 +27,8 @@ async function getQuotes(pgnum) {
     await page.type('input[name="password"]', password);
     await page.click('input[type="submit"]');
     await page.waitForNavigation({ waitUntil: "networkidle2" });
+
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
   }
 
   // Scrape quotes
