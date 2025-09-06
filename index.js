@@ -31,12 +31,8 @@ async function getQuotes(pgnum) {
         await page.type('input[name="username"]', username);
         await page.type('input[name="password"]', password);
         await page.click('input[type="submit"]');
-        try {
+        
         await page.waitForSelector('a[href="/logout"]', { timeout: TO });
-        } catch (err) {
-          console.log(await page.content())
-          console.log("2")
-        }
 
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TO });
       }
