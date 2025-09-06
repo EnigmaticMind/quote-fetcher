@@ -10,43 +10,63 @@ app.use(cors());
 const username = "a"
 const password = "b"
 
+const TO = '30000'
+
 async function getQuotes(pgnum) {
   const url = pgnum ? `https://quotes.toscrape.com/page/${pgnum}/` : `https://quotes.toscrape.com/`
   console.log(`Request URL to scrape ${url}`)
 
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+   try {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
 
-  // If not logged in, click login link
-  if (await page.$('a[href="/login"]')) {
-    await page.click('a[href="/login"]');
-    await page.waitForSelector('input[name="username"]');
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TO });
 
-    await page.type('input[name="username"]', username);
-    await page.type('input[name="password"]', password);
-    await page.click('input[type="submit"]');
-    await page.waitForNavigation({ waitUntil: "networkidle2" });
+    try {
+      // If not logged in, click login link
+      if (await page.$('a[href="/login"]')) {
+        await page.click('a[href="/login"]');
+        await page.waitForSelector('input[name="username"]');
 
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-  }
+        await page.type('input[name="username"]', username);
+        await page.type('input[name="password"]', password);
+        await page.click('input[type="submit"]');
+        try {
+        await page.waitForSelector('a[href="/logout"]', { timeout: TO });
+        } catch (err) {
+          console.log(await page.content())
+          console.log("2")
+        }
 
-  // Scrape quotes
-  const quotes = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll(".quote")).map((el) => ({
-      text: el.querySelector(".text")?.innerText || "",
-      author: el.querySelector(".author")?.innerText || "",
-      tags: Array.from(el.querySelectorAll(".tags .tag")).map((t) => t.innerText),
-    }));
-  });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TO });
+      }
 
-  // Throw an error if no quotes found, probably a change in the endpoint or service outage
-  if (!quotes) {
-    throw new Error("No quotes found on page.");
-  }
+      // Scrape quotes
+      const quotes = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll(".quote")).map((el) => ({
+          text: el.querySelector(".text")?.innerText || "",
+          author: el.querySelector(".author")?.innerText || "",
+          tags: Array.from(el.querySelectorAll(".tags .tag")).map((t) => t.innerText),
+        }));
+      });
 
-  await browser.close();
-  return quotes;
+      // Throw an error if no quotes found, probably a change in the endpoint or service outage
+      if (!quotes || quotes.length === 0) {
+        throw new Error("No quotes found on page.");
+      }
+      return quotes;
+
+    } catch (err) {
+      const currentUrl = page.url();
+      console.log("Current URL when timeout occurred:", currentUrl);
+      throw err
+    } finally {
+      await browser.close();
+    }
+   } catch (err) {
+    console.log(`Err: `, err)
+    throw err
+   }
 }
 
 // In-memory cache
@@ -70,7 +90,7 @@ app.get('/', async (req, res) => {
       now - cache[cacheKey].timestamp > CACHE_TTL_MS
     ) {
       console.log(`⏳ Fetching fresh quotes for ${pg}...`);
-      const data = await getQuotes([pg]);
+      const data = await getQuotes(pg);
       cache[cacheKey] = { data, timestamp: now };
       lastFetchTime = now;
     } else {
@@ -79,6 +99,8 @@ app.get('/', async (req, res) => {
 
     res.json(cache[cacheKey].data);
   } catch (err) {
+    console.log("Main Error")
+    console.log(err)
     res.status(500).json({ error: err.message });
   }
 })
